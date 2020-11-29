@@ -12,7 +12,7 @@ namespace NSGA_II
         {
             List<Chromosome> population = new List<Chromosome>();
             double[] minGenesVal = { 1.4, 500.0, 0.0 };
-            double[] maxGenesVal = { 2.5, 10000, 100 };
+            double[] maxGenesVal = { 2.5, 10000.0, 100.0 };
 
             for (int i = 0; i < N; i++)
             {
@@ -38,7 +38,7 @@ namespace NSGA_II
             population.ForEach(p =>
             {
                 double sexAppeal = Math.Round(p.Genes[2] + Math.Log10(3 * p.Genes[1]) + Math.Sqrt(Math.PI) * p.Genes[0], 3);
-                double surviveRatio = Math.Round(Math.Sqrt(699 * p.Genes[2] - p.Genes[1] - p.Genes[0]), 3);
+                double surviveRatio = Math.Round(Math.Sqrt(Math.Abs(1200 * p.Genes[2] - p.Genes[1] - p.Genes[0])), 3);
                 p.Fitness.Add(sexAppeal);
                 p.Fitness.Add(surviveRatio);
             });
@@ -127,18 +127,134 @@ namespace NSGA_II
             return population.OrderBy(p => p.FrontLevel).ToList();
         }
 
+        static int CountPopFront(List<Chromosome> population, int front)
+        {
+            int count = 0;
+            population.ForEach(p =>
+            {
+                if (p.FrontLevel == front)
+                    count++;
+            });
+            return count;
+        }
+
+        public static List<Chromosome> GetBestByCrawdingDistFromFront(List<Chromosome> population, int N)
+        {
+            List<Chromosome> theBest = new List<Chromosome>();
+
+            Dictionary<int, double> distances = new Dictionary<int, double>();
+
+            for (int i = 0; i < population.Count; i++)
+            {
+                if (i == 0 || i == population.Count - 1)
+                {
+                    distances[i] = double.PositiveInfinity;
+                }
+                else
+                {
+                    distances[i] = Math.Abs(population[i - 1].Fitness[0] - population[i + 1].Fitness[0]) + Math.Abs(population[i - 1].Fitness[1] - population[i + 1].Fitness[1]);
+                }
+            }
+
+            List<int> indexBestDistance = distances.OrderByDescending(d => d.Value).Select(k => k.Key).ToList();
+
+            for (int i = 0; i < N; i++)
+            {
+                theBest.Add(population[indexBestDistance[i]]);
+            }
+
+            return theBest;
+        }
+
+        static List<Chromosome> TakeTheBestPop(List<Chromosome> population, int N)
+        {
+            List<Chromosome> newPop = new List<Chromosome>();
+            int countN = N;
+            int frontLevel = 0;
+
+            for (int i = 0; i < N; i++)
+            {
+                frontLevel++;
+                int popFrontCount = CountPopFront(population, frontLevel);
+
+                // pot avea cel mult pop count front uri
+                while(popFrontCount == 0)
+                {
+                    frontLevel++;
+                    popFrontCount = CountPopFront(population, frontLevel);
+                }
+
+                countN -= popFrontCount;
+                if (countN >= 0)
+                {
+                    population.ForEach(p =>
+                    {
+                        if (p.FrontLevel == frontLevel)
+                            newPop.Add(p);
+                    });
+                }
+                else
+                {
+                    List<Chromosome> popFromFront = new List<Chromosome>();
+                    int necesar = countN + popFrontCount;
+                    population.ForEach(p =>
+                    {
+                        if (p.FrontLevel == frontLevel)
+                        {
+                            popFromFront.Add(p);
+                        }
+                    });
+                    List<Chromosome> selectedPopFromFront = GetBestByCrawdingDistFromFront(popFromFront, necesar);
+                    selectedPopFromFront.ForEach(sp => { newPop.Add(sp); });
+                    break;
+                }
+                if(i == N - 1)
+                {
+                    Console.WriteLine("");
+                }
+            }
+
+            return newPop;
+        }
+
+        static void ShowParetoOptimal(List<Chromosome> population)
+        {
+            using (System.IO.StreamWriter file =
+            new System.IO.StreamWriter(@"C:\Users\Public\OutputNSGA-2.txt"))
+            {
+                population.ForEach(p =>
+                {
+                    if (p.FrontLevel == 1)
+                    {
+                        Console.WriteLine(String.Format("Individ: [I: {0}, M: {1}, H: {2}] => F(ch) = [SA: {3}, SR: {4}]", p.Genes[0], p.Genes[1], p.Genes[2], p.Fitness[0], p.Fitness[1]));
+                        file.WriteLine(String.Format("Optimal= {0} {1}", p.Fitness[0], p.Fitness[1]));
+                    }
+                    else
+                    {
+                        file.WriteLine(String.Format("NeOptimal= {0} {1}", p.Fitness[0], p.Fitness[1]));
+                    }
+                });
+            }
+        }
+
         static int Main(string[] args)
         {
             const int N = 100;
+            int epochs = 12;
             const double pc = 0.9, pm = 0.02;
             // generam populatia
             List<Chromosome> parents = GeneratePopulation(N);
-            List<Chromosome> children = MakeChildren(parents, pc, pm);
-            List<Chromosome> population = CombinePopulation(parents, children);
-            ComputeFitness(population);
-            List<Chromosome> sortedPop = NonDominatedSorting(population);
-            // facem incrucisarea
-            // sortam indivizii
+            while(epochs != 0)
+            {
+                List<Chromosome> children = MakeChildren(parents, pc, pm);
+                List<Chromosome> population = CombinePopulation(parents, children);
+                ComputeFitness(population);
+                List<Chromosome> sortedPop = NonDominatedSorting(population);
+                List<Chromosome> elites = TakeTheBestPop(population, N);
+                parents = elites;
+                epochs--;
+            }
+            ShowParetoOptimal(parents);
             // luam jumatate, pe cei mai buni
 
             return 0;
