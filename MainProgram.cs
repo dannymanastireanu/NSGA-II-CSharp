@@ -11,7 +11,7 @@ namespace NSGA_II
         static List<Chromosome> GeneratePopulation(int N)
         {
             List<Chromosome> population = new List<Chromosome>();
-            double[] minGenesVal = { 1.4, 500.0, 0.0 };
+            double[] minGenesVal = { 1.4, 500.0, 10.0 };
             double[] maxGenesVal = { 2.5, 10000.0, 100.0 };
 
             for (int i = 0; i < N; i++)
@@ -37,8 +37,8 @@ namespace NSGA_II
 
             population.ForEach(p =>
             {
-                double sexAppeal = Math.Round(p.Genes[2] + Math.Log10(3 * p.Genes[1]) + Math.Sqrt(Math.PI) * p.Genes[0], 3);
-                double surviveRatio = Math.Round(Math.Sqrt(Math.Abs(1200 * p.Genes[2] - p.Genes[1] - p.Genes[0])), 3);
+                double sexAppeal = Math.Round(0.1 * p.Genes[2] + 0.5 * p.Genes[1] + 0.4 * p.Genes[0], 3);
+                double surviveRatio = Math.Round(0.5 * p.Genes[2] + 0.4 * p.Genes[1] + 0.1 * p.Genes[0], 3);
                 p.Fitness.Add(sexAppeal);
                 p.Fitness.Add(surviveRatio);
             });
@@ -117,14 +117,33 @@ namespace NSGA_II
                         }
                     }
                 }
-                population[i].FrontLevel = population[i].Np + 1;
-                if (population[i].FrontLevel == 1)
-                    population[i].ParetoOptimal = true;
-                else
-                    population[i].ParetoOptimal = false;
             }
 
-            return population.OrderBy(p => p.FrontLevel).ToList();
+            List<Chromosome> sortedByNp = population.OrderBy(p => p.Np).ToList();
+            int frontLevel = 1;
+            for(int i = 0; i < sortedByNp.Count; i++)
+            {
+                if(i == 0)
+                {
+                    sortedByNp[i].FrontLevel = frontLevel;
+                } else
+                {
+                    int prev = i - 1;
+                    if(sortedByNp[i].Np != sortedByNp[prev].Np)
+                    {
+                        frontLevel++;
+                    }
+                    sortedByNp[i].FrontLevel = frontLevel;
+                }
+
+                if (sortedByNp[i].FrontLevel == 1)
+                    sortedByNp[i].ParetoOptimal = true;
+                else
+                    sortedByNp[i].ParetoOptimal = false;
+            }
+
+
+            return sortedByNp.OrderBy(p => p.FrontLevel).ToList();
         }
 
         static int CountPopFront(List<Chromosome> population, int front)
@@ -240,7 +259,7 @@ namespace NSGA_II
         static int Main(string[] args)
         {
             const int N = 100;
-            int epochs = 12;
+            int epochs = 10;
             const double pc = 0.9, pm = 0.02;
             // generam populatia
             List<Chromosome> parents = GeneratePopulation(N);
