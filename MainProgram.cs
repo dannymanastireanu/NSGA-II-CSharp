@@ -38,7 +38,7 @@ namespace NSGA_II
             population.ForEach(p =>
             {
                 double sexAppeal = Math.Round(0.1 * p.Genes[2] + 0.5 * p.Genes[1] + 0.4 * p.Genes[0], 3);
-                double surviveRatio = Math.Round(0.5 * p.Genes[2] + 0.4 * p.Genes[1] + 0.1 * p.Genes[0], 3);
+                double surviveRatio = Math.Round(1.0/(p.Genes[0] + p.Genes[1]/10000 + p.Genes[2]), 5);
                 p.Fitness.Add(sexAppeal);
                 p.Fitness.Add(surviveRatio);
             });
@@ -101,6 +101,61 @@ namespace NSGA_II
         static List <Chromosome> CombinePopulation(List<Chromosome> parents, List<Chromosome> children)
         {
             return parents.Concat(children).ToList();
+        }
+
+        static List<Chromosome> FastNonDominatedSort(List<Chromosome> population)
+        {
+            List<Chromosome> sortedByFront = new List<Chromosome>();
+            List<Chromosome>[] F = new List<Chromosome>[population.Count];
+            int i = 1;
+            int qrank = 1;
+
+            population.ForEach(p =>
+            {
+                p.Sp = new List<Chromosome>();
+                population.ForEach(q =>
+                {
+                    if(q.Fitness[0] < p.Fitness[0] && q.Fitness[1] < p.Fitness[1])
+                    {
+                        p.Sp.Add(q);
+                    } else if(q.Fitness[0] > p.Fitness[0] && q.Fitness[1] > p.Fitness[1])
+                    {
+                        p.Np++;
+                    }
+                });
+                if(p.Np == 0 && p.Sp.Count != 0)
+                {
+                    if (F[i] == null)
+                        F[i] = new List<Chromosome>();
+                    F[i].Add(p);
+                    p.FrontLevel = i;
+                    p.ParetoOptimal = true;
+                    sortedByFront.Add(p);
+                }
+            });
+
+            List<Chromosome> Q = new List<Chromosome>();
+            while (F[i] != null && i < population.Count - 1)
+            {
+                F[i].ForEach(p => {
+                    p.Sp.ForEach(q => {
+                        q.Np--;
+                        if (q.Np == 0)
+                        {
+                            qrank = i + 1;
+                            q.FrontLevel = qrank;
+                            Q.Add(q);
+                        }
+                    });
+                });
+
+                i++;
+                F[i] = new List<Chromosome>(Q);
+                sortedByFront.AddRange(F[i]);
+                Q.Clear();
+            }
+
+            return sortedByFront;
         }
 
         static List<Chromosome> NonDominatedSorting(List<Chromosome> population)
@@ -246,11 +301,11 @@ namespace NSGA_II
                     if (p.FrontLevel == 1)
                     {
                         Console.WriteLine(String.Format("Individ: [I: {0}, M: {1}, H: {2}] => F(ch) = [SA: {3}, SR: {4}]", p.Genes[0], p.Genes[1], p.Genes[2], p.Fitness[0], p.Fitness[1]));
-                        file.WriteLine(String.Format("Optimal= {0} {1}", p.Fitness[0], p.Fitness[1]));
+                        file.WriteLine(String.Format("F{0} = {1} {2}", p.FrontLevel, p.Fitness[0], p.Fitness[1]));
                     }
                     else
                     {
-                        file.WriteLine(String.Format("NeOptimal= {0} {1}", p.Fitness[0], p.Fitness[1]));
+                        file.WriteLine(String.Format("F{0} = {1} {2}", p.FrontLevel, p.Fitness[0], p.Fitness[1]));
                     }
                 });
             }
@@ -259,8 +314,8 @@ namespace NSGA_II
         static int Main(string[] args)
         {
             const int N = 100;
-            int epochs = 10;
-            const double pc = 0.9, pm = 0.02;
+            int epochs = 3;
+            const double pc = 0.90, pm = 0.02;
             // generam populatia
             List<Chromosome> parents = GeneratePopulation(N);
             while(epochs != 0)
@@ -268,7 +323,8 @@ namespace NSGA_II
                 List<Chromosome> children = MakeChildren(parents, pc, pm);
                 List<Chromosome> population = CombinePopulation(parents, children);
                 ComputeFitness(population);
-                List<Chromosome> sortedPop = NonDominatedSorting(population);
+                List<Chromosome> sortedPop = FastNonDominatedSort(population);
+                //List<Chromosome> sortedPop = NonDominatedSorting(population);
                 List<Chromosome> elites = TakeTheBestPop(population, N);
                 parents = elites;
                 epochs--;

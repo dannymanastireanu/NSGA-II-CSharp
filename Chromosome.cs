@@ -23,6 +23,7 @@ namespace NSGA_II
         public bool ParetoOptimal { get; set; }
         public int FrontLevel { get; set; }
         public int Np { get; set; }
+        public List<Chromosome> Sp { get; set; }
 
         private static Random _rand = new Random();
 
